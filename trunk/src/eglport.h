@@ -47,9 +47,15 @@ extern "C" {
 /**         USE_GLES1 : EGL for use with OpenGL-ES 1.X contexts */
 /**         USE_GLES2 : EGL for use with OpenGL-ES 2.0 contexts */
 
+enum EGL_RENDER_T {
+    RENDER_RAW=0,           /** Sets render mode to raw or framebuffer mode. */
+    RENDER_SDL,             /** Sets render mode to X11/SDL mode. */
+    RENDER_TOTAL
+};
+
 /** Public API */
 void    EGL_Close                   ( void );
-int8_t  EGL_Open                    ( uint16_t width, uint16_t height );
+int8_t  EGL_Open                    ( uint16_t width, uint16_t height, uint16_t depth, bool vsync );
 void    EGL_SwapBuffers             ( void );
 
 /** Simple Examples  */

@@ -27,6 +27,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 #if defined(USE_EGL_SDL)
 #include "SDL.h"
@@ -48,12 +49,6 @@ int fbdev = -1;
 #elif defined(RPI)
 #include "bcm_host.h"
 #endif /* PANDORA */
-
-enum EGL_RENDER_T {
-    RENDER_RAW=0,           /** Sets render mode to raw or framebuffer mode. */
-    RENDER_SDL,             /** Sets render mode to X11/SDL mode. */
-    RENDER_TOTAL
-};
 
 enum EGL_SETTINGS_T {
     CFG_MODE=0,             /** Render mode for EGL 0=RAW 1=SDL. */
@@ -86,7 +81,7 @@ uint32_t    fpsCount    = 0;                /** Total number of frames counted *
 uint32_t    fpsTime     = 0;                /** Start time of frame count measurment */
 
 /** Private API */
-void        OpenCfg                 ( const char* file );
+void        OpenCfg                 ( const char* file, uint16_t depth, bool vsync );
 int8_t      ConfigureEGL            ( EGLConfig config );
 int8_t      FindEGLConfigs          ( void );
 int8_t      CheckEGLErrors          ( const char* file, uint16_t line );
@@ -157,9 +152,11 @@ void EGL_SwapBuffers( void )
 /** @brief Obtain the system display and initialize EGL
  * @param width : desired pixel width of the window (not used by all platforms)
  * @param height : desired pixel height of the window (not used by all platforms)
+ * @param depth : desired screen depth (should be either 16 or 32)
+ * @param vsync  : vsync enabled/disabled
  * @return : 0 if the function passed, else 1
  */
-int8_t EGL_Open( uint16_t width, uint16_t height )
+int8_t EGL_Open( uint16_t width, uint16_t height, uint16_t depth, bool vsync )
 {
     EGLint eglMajorVer, eglMinorVer;
     EGLBoolean result;
@@ -186,7 +183,7 @@ int8_t EGL_Open( uint16_t width, uint16_t height )
     }
 
     /* Check for the cfg file to alternative settings */
-    OpenCfg( "eglport.cfg" );
+    OpenCfg( "eglport.cfg", depth, vsync);
 
     /* Setup any platform specific bits */
     Platform_Open();
@@ -288,8 +285,10 @@ int8_t EGL_Open( uint16_t width, uint16_t height )
 
 /** @brief Read settings that configure how to use EGL
  * @param file : name of the config file
+ * @param depth : desired default screen depth, should be 16 or 32
+ * @param vsync : true == vsync, false == no vsync
  */
-void OpenCfg ( const char* file )
+void OpenCfg ( const char* file, uint16_t depth, bool vsync )
 {
     #define MAX_STRING 20
     #define MAX_SIZE 100
@@ -310,21 +309,30 @@ void OpenCfg ( const char* file )
     strncpy( eglStrings[CFG_BUFFER_SIZE], "size_buffer=", MAX_STRING );
     strncpy( eglStrings[CFG_STENCIL_SIZE], "size_stencil=", MAX_STRING );
 
+    /* Write in a default name for unused configs */
+    for (i=0; i<CFG_TOTAL; i++)
+    {
+	if ( strlen(eglStrings[i]) <= 0)
+        {
+    	    strncpy( eglStrings[i], "default", MAX_STRING );
+        }
+    }
+
     /* Set defaults */
 #if defined(USE_EGL_SDL)
     eglSettings[CFG_MODE]           = RENDER_SDL;
 #else
     eglSettings[CFG_MODE]           = RENDER_RAW;
 #endif
-    eglSettings[CFG_VSYNC]          = 0;
+    eglSettings[CFG_VSYNC]          = vsync;
     eglSettings[CFG_FSAA]           = 0;
     eglSettings[CFG_FPS]            = 0;
-    eglSettings[CFG_RED_SIZE]       = 5;
-    eglSettings[CFG_GREEN_SIZE]     = 6;
-    eglSettings[CFG_BLUE_SIZE]      = 5;
-    eglSettings[CFG_ALPHA_SIZE]     = 0;
-    eglSettings[CFG_DEPTH_SIZE]     = 16;
-    eglSettings[CFG_BUFFER_SIZE]    = 16;
+    eglSettings[CFG_RED_SIZE]       = (depth == 16) ? 5 : 8;
+    eglSettings[CFG_GREEN_SIZE]     = (depth == 16) ? 6 : 8;
+    eglSettings[CFG_BLUE_SIZE]      = (depth == 16) ? 5 : 8;
+    eglSettings[CFG_ALPHA_SIZE]     = (depth == 16) ? 0 : 8;
+    eglSettings[CFG_DEPTH_SIZE]     = 0;
+    eglSettings[CFG_BUFFER_SIZE]    = (depth == 16) ? 16 : 32;
     eglSettings[CFG_STENCIL_SIZE]   = 0;
 
     /* Parse INI file */
@@ -530,6 +538,8 @@ int8_t GetNativeDisplay( void )
 int8_t GetNativeWindow( uint16_t width, uint16_t height )
 {
     nativeWindow = 0;
+
+    printf( "EGLport Resolution: %d x %d\n", width, height );
 
 #if defined(WIZ) || defined(CAANOO)
 
